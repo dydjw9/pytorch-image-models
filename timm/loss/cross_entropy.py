@@ -23,7 +23,7 @@ class LabelSmoothingCrossEntropy(nn.Module):
         nll_loss = nll_loss.squeeze(1)
         smooth_loss = -logprobs.mean(dim=-1)
         loss = self.confidence * nll_loss + self.smoothing * smooth_loss
-        return loss.mean()
+        return loss
 
 
 class SoftTargetCrossEntropy(nn.Module):
@@ -33,4 +33,4 @@ class SoftTargetCrossEntropy(nn.Module):
 
     def forward(self, x, target):
         loss = torch.sum(-target * F.log_softmax(x, dim=-1), dim=-1)
-        return loss.mean()
+        return loss

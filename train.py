@@ -33,7 +33,7 @@ from timm.models import create_model, safe_model_name, resume_checkpoint, load_c
     convert_splitbn_model, model_parameters
 from timm.utils import *
 from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy, JsdCrossEntropy
-from timm.optim import create_optimizer_v2, optimizer_kwargs
+from timm.optim import create_optimizer_v2, optimizer_kwargs,layer_dp_sam
 from timm.scheduler import create_scheduler
 from timm.utils import ApexScaler, NativeScaler
 
@@ -279,6 +279,13 @@ parser.add_argument('--torchscript', dest='torchscript', action='store_true',
                     help='convert model torchscript for inference')
 parser.add_argument('--log-wandb', action='store_true', default=False,
                     help='log training and validation metrics to wandb')
+#para for esam 
+parser.add_argument("--weight_dropout", default=0.0, type=float, help="Dropout rate.")
+parser.add_argument("--opt_dropout", default=0.0, type=float, help="Dropout rate.")
+parser.add_argument("--nograd_cutoff", default=0.0, type=float, help="Dropout rate.")
+parser.add_argument("--rho", default=0.05, type=float, help="Rho parameter for SAM.")
+parser.add_argument("--temperature", default=3, type=int, help="temperature.")
+parser.add_argument('--isASAM',action='store_true', default=False)
 
 
 def _parse_args():
@@ -404,7 +411,8 @@ def main():
         assert not args.sync_bn, 'Cannot use SyncBatchNorm with torchscripted model'
         model = torch.jit.script(model)
 
-    optimizer = create_optimizer_v2(model, **optimizer_kwargs(cfg=args))
+    base_optimizer = create_optimizer_v2(model, **optimizer_kwargs(cfg=args))
+    optimizer = layer_dp_sam.SAM(model.parameters(), base_optimizer, rho=args.rho, weight_dropout=args.weight_dropout,adaptive=args.isASAM,nograd_cutoff=args.nograd_cutoff,opt_dropout = args.opt_dropout,temperature=args.temperature)
 
     # setup automatic mixed-precision (AMP) loss scaling and op casting
     amp_autocast = suppress  # do nothing
@@ -552,7 +560,7 @@ def main():
     elif args.smoothing:
         train_loss_fn = LabelSmoothingCrossEntropy(smoothing=args.smoothing).cuda()
     else:
-        train_loss_fn = nn.CrossEntropyLoss().cuda()
+        train_loss_fn = nn.CrossEntropyLoss(reduction="none").cuda()
     validate_loss_fn = nn.CrossEntropyLoss().cuda()
 
     # setup checkpoint saver and eval metric tracking
@@ -653,30 +661,38 @@ def train_one_epoch(
         if args.channels_last:
             input = input.contiguous(memory_format=torch.channels_last)
 
-        with amp_autocast():
-            output = model(input)
-            loss = loss_fn(output, target)
+        def loss_fct(input,target):
+            with amp_autocast():
+                output = model(input)
+                loss = loss_fn(output, target)
+            return loss
 
-        if not args.distributed:
-            losses_m.update(loss.item(), input.size(0))
 
         optimizer.zero_grad()
-        if loss_scaler is not None:
-            loss_scaler(
-                loss, optimizer,
-                clip_grad=args.clip_grad, clip_mode=args.clip_mode,
-                parameters=model_parameters(model, exclude_head='agc' in args.clip_mode),
-                create_graph=second_order)
-        else:
-            loss.backward(create_graph=second_order)
-            if args.clip_grad is not None:
-                dispatch_clip_grad(
-                    model_parameters(model, exclude_head='agc' in args.clip_mode),
-                    value=args.clip_grad, mode=args.clip_mode)
-            optimizer.step()
+        def defined_backward(loss):
+            if loss_scaler is not None:
+                loss_scaler(
+                    loss, optimizer,
+                    clip_grad=args.clip_grad, clip_mode=args.clip_mode,
+                    parameters=model_parameters(model, exclude_head='agc' in args.clip_mode),
+                    create_graph=second_order)
+            else:
+                loss.backward(create_graph=second_order)
+                if args.clip_grad is not None:
+                    dispatch_clip_grad(
+                        model_parameters(model, exclude_head='agc' in args.clip_mode),
+                        value=args.clip_grad, mode=args.clip_mode)
+        paras = [input,target,loss_fct,model,defined_backward]
+        optimizer.paras = paras
+        optimizer.step()
+        predictions,loss = optimizer.returnthings
+        loss = loss.mean()
 
         if model_ema is not None:
             model_ema.update(model)
+
+        if not args.distributed:
+            losses_m.update(loss.item(), input.size(0))
 
         torch.cuda.synchronize()
         num_updates += 1
