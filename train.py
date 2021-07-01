@@ -451,15 +451,17 @@ def main():
 
     # setup distributed training
     if args.distributed:
-        if has_apex and use_amp != 'native':
+        if has_apex and use_amp != 'apex':
+            if args.local_rank == 0:
+                _logger.info("Using native Torch DistributedDataParallel.")
+            model = NativeDDP(model, device_ids=[args.local_rank])  # can use device str in Torch >= 1.1
+ 
+        else:
             # Apex DDP preferred unless native amp is activated
             if args.local_rank == 0:
                 _logger.info("Using NVIDIA APEX DistributedDataParallel.")
             model = ApexDDP(model, delay_allreduce=True)
-        else:
-            if args.local_rank == 0:
-                _logger.info("Using native Torch DistributedDataParallel.")
-            model = NativeDDP(model, device_ids=[args.local_rank])  # can use device str in Torch >= 1.1
+ 
         # NOTE: EMA model does not need to be wrapped by DDP
 
     # setup learning rate schedule and starting epoch
@@ -682,6 +684,7 @@ def train_one_epoch(
                     dispatch_clip_grad(
                         model_parameters(model, exclude_head='agc' in args.clip_mode),
                         value=args.clip_grad, mode=args.clip_mode)
+
         paras = [input,target,loss_fct,model,defined_backward]
         optimizer.paras = paras
         optimizer.step()
