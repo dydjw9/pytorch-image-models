@@ -22,7 +22,7 @@ class ApexScaler:
             scaled_loss.backward(create_graph=create_graph)
         if clip_grad is not None:
             dispatch_clip_grad(amp.master_params(optimizer), clip_grad, mode=clip_mode)
-        optimizer.step()
+        # optimizer.step()
 
     def state_dict(self):
         if 'state_dict' in amp.__dict__:
@@ -45,8 +45,8 @@ class NativeScaler:
             assert parameters is not None
             self._scaler.unscale_(optimizer)  # unscale the gradients of optimizer's assigned params in-place
             dispatch_clip_grad(parameters, clip_grad, mode=clip_mode)
-        self._scaler.step(optimizer)
-        self._scaler.update()
+        # self._scaler.step(optimizer)
+        # self._scaler.update()
 
     def state_dict(self):
         return self._scaler.state_dict()

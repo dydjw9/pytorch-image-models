@@ -77,8 +77,8 @@ class SAM(torch.optim.Optimizer):
         assert defined_backward is not None, "Sharpness Aware Minimization requires defined_backward, but it was not provided"
         args = self.args
 
-        assert hasattr(model,"require_backward_grad_sync")
-        assert hasattr(model,"require_forward_param_sync")
+        # assert hasattr(model,"require_backward_grad_sync")
+        # assert hasattr(model,"require_forward_param_sync")
         model.require_backward_grad_sync = False
         model.require_forward_param_sync = True
 
