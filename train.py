@@ -286,6 +286,7 @@ parser.add_argument("--nograd_cutoff", default=0.0, type=float, help="Dropout ra
 parser.add_argument("--rho", default=0.05, type=float, help="Rho parameter for SAM.")
 parser.add_argument("--temperature", default=3, type=int, help="temperature.")
 parser.add_argument('--isASAM',action='store_true', default=False)
+parser.add_argument('--eSAM',action='store_false', default=True)
 
 
 def _parse_args():
@@ -685,7 +686,7 @@ def train_one_epoch(
                         model_parameters(model, exclude_head='agc' in args.clip_mode),
                         value=args.clip_grad, mode=args.clip_mode)
 
-        paras = [input,target,loss_fct,model,defined_backward]
+        paras = [input,target,loss_fct,model,defined_backward,args.eSAM]
         optimizer.paras = paras
         optimizer.step()
         predictions,loss = optimizer.returnthings

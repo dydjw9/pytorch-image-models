@@ -73,59 +73,68 @@ class SAM(torch.optim.Optimizer):
         if zero_grad: self.zero_grad()
 
     def step(self):
-        inputs,targets,loss_fct,model,defined_backward = self.paras
+        inputs,targets,loss_fct,model,defined_backward,isSAM = self.paras
         assert defined_backward is not None, "Sharpness Aware Minimization requires defined_backward, but it was not provided"
         args = self.args
 
         # assert hasattr(model,"require_backward_grad_sync")
         # assert hasattr(model,"require_forward_param_sync")
         model.require_backward_grad_sync = False
-        model.require_forward_param_sync = True
+        if isSAM:
+            model.require_forward_param_sync = True
 
-        cutoff = int(len(targets) * args["nograd_cutoff"])
-        if cutoff != 0:
+            cutoff = int(len(targets) * args["nograd_cutoff"])
+            if cutoff != 0:
+                with torch.no_grad():
+                    l_before_1 = loss_fct(inputs[:cutoff],targets[:cutoff])
+
+            l_before_2 = loss_fct(inputs[cutoff:],targets[cutoff:])
+            loss = l_before_2
+            l_before = torch.cat((l_before_1,l_before_2.clone().detach()),0).detach()
+            predictions = None
+            return_loss = loss.clone().detach()
+            self.returnthings = (predictions,return_loss)
+            loss = loss.mean()
+            defined_backward(loss)
+            self.first_step(True)
+
+
             with torch.no_grad():
-                l_before_1 = loss_fct(inputs[:cutoff],targets[:cutoff])
+                l_after = loss_fct(inputs,targets)
+                phase2_coeff = (l_after-l_before)/args["temperature"]
+                coeffs = F.softmax(phase2_coeff).detach()
 
-        l_before_2 = loss_fct(inputs[cutoff:],targets[cutoff:])
-        loss = l_before_2
-        l_before = torch.cat((l_before_1,l_before_2.clone().detach()),0).detach()
-        predictions = None
-        return_loss = loss.clone().detach()
-        self.returnthings = (predictions,return_loss)
-        loss = loss.mean()
-        defined_backward(loss)
-        self.first_step(True)
-
-
-        with torch.no_grad():
-            l_after = loss_fct(inputs,targets)
-            phase2_coeff = (l_after-l_before)/args["temperature"]
-            coeffs = F.softmax(phase2_coeff).detach()
-
-            #codes for sorting 
-            prob = 1 - args["opt_dropout"] 
-            if prob >=0.99:
-                indices = range(len(targets))
-            else:
-                pp = int(len(coeffs) * prob)
-                cutoff,_ = torch.topk(phase2_coeff,pp)
-                cutoff = cutoff[-1]
-                # cutoff = 0
-                #select top k% 
-                indices = [phase2_coeff > cutoff] 
+                #codes for sorting 
+                prob = 1 - args["opt_dropout"] 
+                if prob >=0.99:
+                    indices = range(len(targets))
+                else:
+                    pp = int(len(coeffs) * prob)
+                    cutoff,_ = torch.topk(phase2_coeff,pp)
+                    cutoff = cutoff[-1]
+                    # cutoff = 0
+                    #select top k% 
+                    indices = [phase2_coeff > cutoff] 
 
 
-        # second forward-backward step
+            # second forward-backward step
 
-        model.require_backward_grad_sync = True
-        model.require_forward_param_sync = False
+            model.require_backward_grad_sync = True
+            model.require_forward_param_sync = False
 
 
-        loss = loss_fct(inputs[indices], targets[indices])
-        loss = (loss * coeffs[indices]).sum()
-        defined_backward(loss)
-        self.second_step(True)
+            loss = loss_fct(inputs[indices], targets[indices])
+            loss = (loss * coeffs[indices]).sum()
+            defined_backward(loss)
+            self.second_step(True)
+        else:
+            loss = loss_fct(inputs, targets)
+            loss = loss.mean()
+            defined_backward(loss)
+            self.base_optimizer.step()
+            self.zero_grad()
+            
+
  
 
     def _grad_norm(self):
