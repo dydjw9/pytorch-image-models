@@ -133,6 +133,8 @@ class SAM(torch.optim.Optimizer):
             defined_backward(loss)
             self.base_optimizer.step()
             self.zero_grad()
+            predictions = None
+            self.returnthings = (predictions,loss)
             
 
  
