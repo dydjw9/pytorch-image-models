@@ -28,14 +28,14 @@ import torch.nn as nn
 import torchvision.utils
 from torch.nn.parallel import DistributedDataParallel as NativeDDP
 
-from timm.data import create_dataset, create_loader, resolve_data_config, Mixup, FastCollateMixup, AugMixDataset
-from timm.models import create_model, safe_model_name, resume_checkpoint, load_checkpoint,\
+from timm_esam.data import create_dataset, create_loader, resolve_data_config, Mixup, FastCollateMixup, AugMixDataset
+from timm_esam.models import create_model, safe_model_name, resume_checkpoint, load_checkpoint,\
     convert_splitbn_model, model_parameters
-from timm.utils import *
-from timm.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy, JsdCrossEntropy
-from timm.optim import create_optimizer_v2, optimizer_kwargs,layer_dp_sam
-from timm.scheduler import create_scheduler
-from timm.utils import ApexScaler, NativeScaler
+from timm_esam.utils import *
+from timm_esam.loss import LabelSmoothingCrossEntropy, SoftTargetCrossEntropy, JsdCrossEntropy
+from timm_esam.optim import create_optimizer_v2, optimizer_kwargs,layer_dp_sam
+from timm_esam.scheduler import create_scheduler
+from timm_esam.utils import ApexScaler, NativeScaler
 
 try:
     from apex import amp
