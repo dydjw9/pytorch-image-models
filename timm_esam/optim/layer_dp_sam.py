@@ -111,8 +111,8 @@ class SAM(torch.optim.Optimizer):
                     cutoff_tail = torch.topk(phase2_coeff,pp_tail)[0][-1]
                     # cutoff = 0
                     #select top k% 
-                    indices_head = [phase2_coeff > cutoff_head] 
-                    indices_tail = [phase2_coeff < cutoff_tail] 
+                    indices_head = phase2_coeff > cutoff_head
+                    indices_tail = phase2_coeff < cutoff_tail
                     indices = torch.logical_and(indices_head,indices_tail)
  
 
