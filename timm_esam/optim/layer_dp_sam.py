@@ -18,18 +18,6 @@ class SAM(torch.optim.Optimizer):
         self.weight_dropout = weight_dropout
         self.paras = None
 
-    @torch.no_grad()
-    def rand_int_w(self):
-        grad_norm = self._grad_norm()
-        for group in self.param_groups:
-            scale = group["rho"] / (grad_norm + 1e-7) /(1-self.weight_dropout)
-
-            for p in group["params"]:
-                init = torch.normal(0.0,1e-8,p.size())
-                e_w = init * scale.to(p)
-                p.add_(e_w)  
-                self.state[p]["e_w"] = e_w
-
 
     @torch.no_grad()
     def first_step(self, zero_grad=False):
@@ -73,7 +61,7 @@ class SAM(torch.optim.Optimizer):
         if zero_grad: self.zero_grad()
 
     def step(self):
-        inputs,targets,loss_fct,model,defined_backward,isSAM = self.paras
+        inputs,targets,loss_fct,model,defined_backward,isSAM,pickmiddle = self.paras
         assert defined_backward is not None, "Sharpness Aware Minimization requires defined_backward, but it was not provided"
         args = self.args
 
@@ -108,14 +96,25 @@ class SAM(torch.optim.Optimizer):
                 prob = 1 - args["opt_dropout"] 
                 if prob >=0.99:
                     indices = range(len(targets))
-                else:
+                elif not pickmiddle:
                     pp = int(len(coeffs) * prob)
                     cutoff,_ = torch.topk(phase2_coeff,pp)
                     cutoff = cutoff[-1]
                     # cutoff = 0
                     #select top k% 
                     indices = [phase2_coeff > cutoff] 
-
+                else:
+                    floating = 0.1
+                    pp_head = int(len(coeffs) * (prob+floating))
+                    pp_tail = int(len(coeffs) * (floating))
+                    cutoff_head = torch.topk(phase2_coeff,pp_head)[0][-1]
+                    cutoff_tail = torch.topk(phase2_coeff,pp_tail)[0][-1]
+                    # cutoff = 0
+                    #select top k% 
+                    indices_head = [phase2_coeff > cutoff_head] 
+                    indices_tail = [phase2_coeff < cutoff_tail] 
+                    indices = torch.logical_and(indices_head,indices_tail)
+ 
 
             # second forward-backward step
 
