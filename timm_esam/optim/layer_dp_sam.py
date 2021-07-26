@@ -33,7 +33,7 @@ class SAM(torch.optim.Optimizer):
                 # e_w = p.grad * scale.to(p)
                 #asam 
                 e_w = (torch.pow(p, 2) if group["adaptive"] else 1.0) * p.grad * scale.to(p)
-                p.add_(e_w)  # climb to the local maximum "w + e(w)"
+                p.add_(e_w * 0.1)  # climb to the local maximum "w + e(w)"
                 # if self.state[p]:
                     # p.sub_(self.state[p]["e_w"])
                 self.state[p]["e_w"] = e_w
@@ -43,6 +43,16 @@ class SAM(torch.optim.Optimizer):
 
         if zero_grad: self.zero_grad()
         return taylor_appro * scale.to(p)
+
+
+    @torch.no_grad()
+    def first_half(self, zero_grad=False):
+        #first order sum 
+        for group in self.param_groups:
+            for p in group["params"]:
+                if self.state[p]:
+                    p.add_(self.state[p]["e_w"]*0.90)  # climb to the local maximum "w + e(w)"
+
 
     @torch.no_grad()
     def second_step(self, zero_grad=False):
@@ -117,6 +127,7 @@ class SAM(torch.optim.Optimizer):
  
 
             # second forward-backward step
+            self.first_half()
 
             model.require_backward_grad_sync = True
             model.require_forward_param_sync = False
