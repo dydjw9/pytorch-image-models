@@ -78,6 +78,7 @@ class SAM(torch.optim.Optimizer):
         # assert hasattr(model,"require_backward_grad_sync")
         # assert hasattr(model,"require_forward_param_sync")
         if isSAM:
+            model.eval()
             model.require_backward_grad_sync = False
             model.require_forward_param_sync = True
 
@@ -133,6 +134,7 @@ class SAM(torch.optim.Optimizer):
             model.require_forward_param_sync = False
 
 
+            model.train()
             loss = loss_fct(inputs[indices], targets[indices])
             loss = (loss * coeffs[indices]).sum()
             defined_backward(loss)
