@@ -78,9 +78,9 @@ class SAM(torch.optim.Optimizer):
         # assert hasattr(model,"require_backward_grad_sync")
         # assert hasattr(model,"require_forward_param_sync")
         if isSAM:
-            model.eval()
-            model.require_backward_grad_sync = False
-            model.require_forward_param_sync = True
+            # model.eval()
+            # model.require_backward_grad_sync = False
+            # model.require_forward_param_sync = True
 
             cutoff = int(len(targets) * args["nograd_cutoff"])
             if cutoff != 0:
@@ -130,11 +130,11 @@ class SAM(torch.optim.Optimizer):
             # second forward-backward step
             self.first_half()
 
-            model.require_backward_grad_sync = True
-            model.require_forward_param_sync = False
+            # model.require_backward_grad_sync = True
+            # model.require_forward_param_sync = False
 
 
-            model.train()
+            # model.train()
             loss = loss_fct(inputs[indices], targets[indices])
             loss = (loss * coeffs[indices]).sum()
             defined_backward(loss)
