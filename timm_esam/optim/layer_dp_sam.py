@@ -78,9 +78,11 @@ class SAM(torch.optim.Optimizer):
         # assert hasattr(model,"require_backward_grad_sync")
         # assert hasattr(model,"require_forward_param_sync")
         if isSAM:
-            # model.eval()
-            model.require_backward_grad_sync = False
-            model.require_forward_param_sync = True
+            if args["opt_dropout"] <= 0.01:
+                model.require_backward_grad_sync = False
+                model.require_forward_param_sync = True
+            else:
+                model.eval()
 
             cutoff = int(len(targets) * args["nograd_cutoff"])
             if cutoff != 0:
@@ -96,8 +98,11 @@ class SAM(torch.optim.Optimizer):
             loss = loss.mean()
             defined_backward(loss)
             self.first_step(True)
-            model.require_backward_grad_sync = True
-            model.require_forward_param_sync = False
+            if args["opt_dropout"] <= 0.01:
+                model.require_backward_grad_sync = True
+                model.require_forward_param_sync = False
+            else:
+                model.train()
 
 
 
@@ -137,11 +142,15 @@ class SAM(torch.optim.Optimizer):
             # model.require_forward_param_sync = False
 
 
-            # model.train()
             loss = loss_fct(inputs[indices], targets[indices])
             loss = (loss * coeffs[indices]).sum()
             defined_backward(loss)
             self.second_step(True)
+
+            #reusume DDP 
+            model.require_backward_grad_sync = True
+            model.require_forward_param_sync = True
+ 
         else:
             loss = loss_fct(inputs, targets)
             loss = loss.mean()
